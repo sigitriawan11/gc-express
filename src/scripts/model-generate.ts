@@ -33,23 +33,25 @@ if (fs.existsSync(outputPath)) {
 }
 
 // Isi file model
-const content = `import { Model } from 'sequelize';
+const content = `import { GCModel } from '../config/model';
 import { ${instance} } from '../app/database';
 
 interface ${name}Attributes {
 }
 
-class ${name}Model extends Model<${name}Attributes> {
+class ${name}Model extends GCModel<${name}Attributes> {
 }
 
 ${name}Model.init(
   {},
   {
     sequelize: ${instance},
-    modelName: '${name.toLowerCase()}',
+    modelName: '${name}',
     schema: ${schema ? `'${schema}'` : "null"},
     freezeTableName: true,
     tableName: '${name.toLowerCase()}',
+    paranoid: false,
+    timestamps: false,
     createdAt: false,
     updatedAt: false,
     deletedAt: false,
