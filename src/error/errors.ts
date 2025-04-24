@@ -18,6 +18,12 @@ export class ResponseError extends BaseError {
   }
 }
 
+export class ErrNotFound extends BaseError {
+  constructor(message = MSG.ERR_NOT_FOUND) {
+    super(message, RC.NOT_FOUND);
+  }
+}
+
 export class ErrBadRequest extends BaseError {
   constructor(message = MSG.ERR_BAD_REQUEST) {
     super(message, RC.BAD_REQUEST);

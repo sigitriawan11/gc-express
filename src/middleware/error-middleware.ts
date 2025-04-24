@@ -43,6 +43,6 @@ export const errorMiddleware = async (
 
   res.status(RC.INTERNAL_SERVER_ERROR).json({
     success: false,
-    message: MSG.ERR_INTERNAL_SERVER_ERROR,
+    message: error.message,
   });
 };
