@@ -3,6 +3,8 @@ import { MiddlewareRegistry, MiddlewareName } from "../middleware";
 import { RoleName } from "../constants/roles";
 import { multerMiddleware } from "./multer";
 import { Utils } from '../utils/utils';
+import { GCModel, GCModelStatic } from "./model";
+import { modelBindingMiddleware } from "../middleware/model-binding-middleware";
 
 export class GCRouter {
   private static _router: Router = express.Router();
@@ -10,17 +12,19 @@ export class GCRouter {
 
   private path: string;
   private method: "get" | "post" | "put" | "delete";
+  public model?: GCModelStatic<GCModel<any>>
   private middlewares: RequestHandler[] = [];
 
-  constructor(method: "get" | "post" | "put" | "delete", path: string) {
+  constructor(method: "get" | "post" | "put" | "delete", path: string, model?: GCModelStatic<GCModel<any>> ) {
     this.method = method;
     this.path = path;
+    this.model = model
   }
 
 
-  static get(path?: string) {
+  static get(path?: string, model?: GCModelStatic<GCModel<any>>) {
     const fullPath = Utils.getFullPath(path);
-    return new GCRouter("get", fullPath);
+    return new GCRouter("get", fullPath, model);
   }
 
   static post(path?: string) {
@@ -28,14 +32,14 @@ export class GCRouter {
     return new GCRouter("post", fullPath);
   }
 
-  static put(path?: string) {
+  static put(path?: string, model?: GCModelStatic<GCModel<any>>) {
     const fullPath = Utils.getFullPath(path);
-    return new GCRouter("put", fullPath);
+    return new GCRouter("put", fullPath, model);
   }
 
-  static delete(path?: string) {
+  static delete(path?: string, model?: GCModelStatic<GCModel<any>>) {
     const fullPath = Utils.getFullPath(path);
-    return new GCRouter("delete", fullPath);
+    return new GCRouter("delete", fullPath, model);
   }
 
   static Group() {
@@ -72,7 +76,12 @@ export class GCRouter {
   };
   
 
-  handler(handler: RequestHandler) {    
+  handler(handler: RequestHandler) {
+    
+    if(this.model){
+      this.middlewares.push(modelBindingMiddleware(this.model))
+    }
+
     GCRouter._router[this.method](this.path, ...this.middlewares, handler);
     return this;
   }
