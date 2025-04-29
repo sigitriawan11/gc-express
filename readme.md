@@ -55,7 +55,7 @@ Untuk menjalankan proyek ini, Anda perlu menambahkan variabel berikut ke file .e
 `DB_PWD_STAGING = root`
 
 NODE_ENV sesuai kebutuhan bisa di tambahkan variabel lain misalnya DEVELOPMENT atau PRODUCTION dan buat variabel DB untuk hal tersebut.
-## Set instance model untuk running server
+## Set instance DB untuk running server
 
 src/app/database.ts
 ```typescript
