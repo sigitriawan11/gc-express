@@ -1,42 +1,87 @@
 import express, { RequestHandler, Router } from "express";
-import path from "path";
 import { MiddlewareRegistry, MiddlewareName } from "../middleware";
 import { RoleName } from "../constants/roles";
 import { multerMiddleware } from "./multer";
+import { Utils } from '../utils/utils';
+import { GCModel, GCModelStatic } from "./model";
+import { modelBindingMiddleware } from "../middleware/model-binding-middleware";
 
 export class GCRouter {
   private static _router: Router = express.Router();
+  private static _groupMiddlewares: RequestHandler[] = [];
 
   private path: string;
   private method: "get" | "post" | "put" | "delete";
+  public model?: GCModelStatic<GCModel<any>>
   private middlewares: RequestHandler[] = [];
 
-  constructor(method: "get" | "post" | "put" | "delete", path: string) {
+  constructor(method: "get" | "post" | "put" | "delete", path: string, model?: GCModelStatic<GCModel<any>> ) {
     this.method = method;
     this.path = path;
+    this.model = model
   }
 
-  static get(path?: string) {
-    const fullPath = getFullPath(path);
-    return new GCRouter("get", fullPath);
+
+  static get(path?: string, model?: GCModelStatic<GCModel<any>>) {
+    const fullPath = Utils.getFullPath(path);
+    return new GCRouter("get", fullPath, model);
   }
 
   static post(path?: string) {
-    const fullPath = getFullPath(path);
+    const fullPath = Utils.getFullPath(path);
     return new GCRouter("post", fullPath);
   }
 
-  static put(path?: string) {
-    const fullPath = getFullPath(path);
-    return new GCRouter("put", fullPath);
+  static put(path?: string, model?: GCModelStatic<GCModel<any>>) {
+    const fullPath = Utils.getFullPath(path);
+    return new GCRouter("put", fullPath, model);
   }
 
-  static delete(path?: string) {
-    const fullPath = getFullPath(path);
-    return new GCRouter("delete", fullPath);
+  static delete(path?: string, model?: GCModelStatic<GCModel<any>>) {
+    const fullPath = Utils.getFullPath(path);
+    return new GCRouter("delete", fullPath, model);
   }
 
-  handler(handler: RequestHandler) {    
+  static Group() {
+    return new this.GroupRouter();
+  }
+  
+  private static GroupRouter = class {
+    private groupMiddlewares: RequestHandler[] = [];
+  
+    middleware(data: MiddlewareName | MiddlewareName[]) {
+      const mw = GCRouter.middlewareFactory(data);
+      this.groupMiddlewares.push(mw);
+      return this;
+    }
+  
+    use(callback: (router: typeof GCRouter) => void) {
+      const originalRouterMethod = GCRouter.prototype.handler;
+  
+      GCRouter.prototype.handler = function (this: GCRouter, handler: RequestHandler) {
+        this.middlewares = [
+          ...((this.constructor as typeof GCRouter)._groupMiddlewares || []),
+          ...(this.middlewares || []),
+        ];
+        return originalRouterMethod.call(this, handler);
+      };
+  
+      (GCRouter as any)._groupMiddlewares = this.groupMiddlewares;
+  
+      callback(GCRouter);
+  
+      delete (GCRouter as any)._groupMiddlewares;
+      GCRouter.prototype.handler = originalRouterMethod;
+    };
+  };
+  
+
+  handler(handler: RequestHandler) {
+    
+    if(this.model){
+      this.middlewares.push(modelBindingMiddleware(this.model))
+    }
+
     GCRouter._router[this.method](this.path, ...this.middlewares, handler);
     return this;
   }
@@ -100,37 +145,4 @@ export class GCRouter {
       }
     };
   }
-}
-
-
-// === UTILS ===
-
-function getFullPath(path?: string): string {
-  const versionPrefix = process.env.API_VERSION_PREFIX || "";
-  const callerPath = getCallerFilePath();
-  const fullPath = path ? `${callerPath}/${path}` : callerPath;
-  return `${versionPrefix}${fullPath}`;
-}
-
-function getCallerFilePath(): string {
-  const originalFunc = Error.prepareStackTrace;
-  let callerFile: string | undefined;
-
-  try {
-    const err = new Error();
-    Error.prepareStackTrace = (_, stack) => stack;
-    const currentFile = (err.stack as any)[0].getFileName();
-
-    for (let i = 1; i < (err.stack as any).length; i++) {
-      callerFile = (err.stack as any)[i].getFileName();
-      if (callerFile !== currentFile) break;
-    }
-  } catch {}
-
-  Error.prepareStackTrace = originalFunc;
-
-  if (!callerFile) throw new Error("Could not determine caller file path.");
-
-  const relativePath = path.relative(path.join(__dirname, "../controllers"), callerFile);
-  return "/" + relativePath.replace(/\\/g, "/").replace(/\.ts$/, "");
 }

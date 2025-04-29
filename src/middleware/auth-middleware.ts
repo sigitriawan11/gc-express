@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { ErrBadRequest, ErrUnauthorized } from "../error/errors";
-import jwt from "jsonwebtoken";
+import { GCAuth } from "../config/auth";
+import { JWTPayloadType } from "../types/gc-types/auth-types";
 
 export const authMiddleware = async (
   req: Request,
@@ -18,45 +19,10 @@ export const authMiddleware = async (
     }
     token = token.replace(/Bearer /g, "");
 
-    function verifyJwtToken(token: string, secret: string) {
-      return new Promise((resolve, reject) => {
-        jwt.verify(token, secret, (err, decoded) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(decoded);
-          }
-        });
-      });
-    }
+    const auth = await GCAuth.validate(token, true)
 
-    let isVerify = await verifyJwtToken(
-      token,
-      process.env.SECRET_ACCESS_TOKEN ?? ""
-    )
-      .then(() => true)
-      .catch(() => false);
-
-    if (!isVerify) {
-      isVerify = await verifyJwtToken(
-        token,
-        process.env.SECRET_REFRESH_TOKEN ?? ""
-      )
-        .then(() => true)
-        .catch(() => false);
-    }
-
-    if (!isVerify) {
-      throw new ErrBadRequest(`JWT Token Invalid`);
-    }
-
-    const decoded = jwt.decode(token);
-    if (!decoded) {
-      throw new ErrBadRequest(`Invalid Payload`);
-    }
-
-    req.body.jwtTokenPayload = decoded;
-    req.body.jwtToken = token;
+    req.jwt_payload = auth as JWTPayloadType
+    req.jwt_token = token;
     return next();
   } catch (error) {
     next(error);
