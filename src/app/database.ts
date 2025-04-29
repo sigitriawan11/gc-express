@@ -10,3 +10,5 @@ const createInstance = (database:string) : Sequelize => {
   };
   return new Sequelize(dbSpecificConfig)
 }
+
+export const usermanagementDB = createInstance('usermanagement')

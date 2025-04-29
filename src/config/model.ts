@@ -1,15 +1,25 @@
 import { Attributes, FindOptions, Model, ModelStatic, Op } from "sequelize";
-import { ErrNotFound } from "../error/errors";
-import { PaginateType } from "../types/gc-types/model-types";
+import { ErrBadRequest, ErrNotFound } from "../error/errors";
+import { PaginateResponse } from "../types/gc-types/model-types";
+
+export interface GCModelStatic<T extends Model<T>> extends ModelStatic<T> {
+  exclude: string[];
+}
 
 export abstract class GCModel<T extends object> extends Model<T> {
-  
+  static exclude: string[] = [];
+
   static async findOrFail<T extends Model>(
-    this: ModelStatic<T>,
+    this: GCModelStatic<T>,
     options: FindOptions<Attributes<T>>,
     errorMessage?: string
   ) {
-    const data = await this.findOne(options);
+    const data = await this.findOne({
+      ...options,
+      attributes: {
+        exclude: this.exclude,
+      },
+    });
 
     if (!data) {
       throw new ErrNotFound(errorMessage);
@@ -19,14 +29,16 @@ export abstract class GCModel<T extends object> extends Model<T> {
   }
 
   static async paginate<T extends Model>(
-    this: ModelStatic<T>,
+    this: GCModelStatic<T>,
     page: string | number = 1,
     pageSize: string | number = 10
-  ) : Promise<PaginateType> {
+  ): Promise<PaginateResponse> {
     const limit = Number(pageSize);
     const offset = (Number(page) - 1) * limit;
 
-    const data = await this.findAndCountAll({ limit, offset });
+    const data = await this.findAndCountAll({ limit, offset, attributes: {
+      exclude: this.exclude
+    } });
 
     return {
       data: data.rows,
@@ -39,35 +51,46 @@ export abstract class GCModel<T extends object> extends Model<T> {
   }
 
   static async search<T extends Model>(
-    this: ModelStatic<T>,
+    this: GCModelStatic<T>,
     fields: (keyof Attributes<T>)[],
     keyword: string,
     paginate?: {
-      page?: string | number,
-      pageSize?: string | number
+      page?: string | number;
+      pageSize?: string | number;
     }
-  ) : Promise<PaginateType | Array<Attributes<T>>> {
+  ): Promise<PaginateResponse | Array<Attributes<T>>> {
     let limit, offset;
-    if(paginate){
-      limit = Number(paginate.pageSize);
-      offset = (Number(paginate.page) - 1) * limit;
+    if (paginate?.page && paginate?.pageSize) {
+      limit = Number(paginate.pageSize ?? 10);
+      offset = (Number(paginate.page ?? 1) - 1) * limit;
     }
 
-    const where = {
-      [Op.or]: fields.map((field) => ({
-        [field]: { [Op.iLike]: `%${keyword}%` },
-      })),
-    };
+    let where = {};
 
-    const data = await this.findAndCountAll({ where, limit, offset });
+    if (fields && fields.length && keyword) {
+      if (!Array.isArray(fields)) {
+        fields = [fields];
+      }
+      where = {
+        [Op.or]: fields.map((field) => ({
+          [field]: { [Op.iLike]: `%${keyword}%` },
+        })),
+      };
+    }
 
-    return paginate ? {
-      data: data.rows,
-      paginate: {
-        total: data.count,
-        page: paginate?.page!,
-        pageSize: paginate?.pageSize!,
-      },
-    } : data.rows
+    const data = await this.findAndCountAll({ where, limit, offset, attributes: {
+      exclude: this.exclude
+    } });
+
+    return paginate?.page && paginate?.pageSize
+      ? {
+          data: data.rows,
+          paginate: {
+            total: data.count,
+            page: Number(paginate?.page! ?? 1),
+            pageSize: Number(paginate?.pageSize! ?? 10),
+          },
+        }
+      : data.rows;
   }
 }
