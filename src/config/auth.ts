@@ -2,7 +2,6 @@ import { ModelStatic } from "sequelize";
 import { ErrBadRequest } from "../error/errors";
 import jwt from "jsonwebtoken";
 import { GCModel } from "./model";
-import AccountModel from "../model/account-model";
 import { JWTPayloadType } from "../types/gc-types/auth-types";
 
 export class GCAuth {
