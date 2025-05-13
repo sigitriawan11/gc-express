@@ -1,6 +1,6 @@
 {
   "name": "gc-express",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Core Express",
   "main": "main.ts",
   "scripts": {
@@ -8,9 +8,10 @@
     "test": "jest",
     "dev": "nodemon --exec ts-node --files src/main.ts",
     "build": "tsc",
-    "generate:roles": "ts-node src/scripts/role-generate.ts",
-    "generate:version": "ts-node src/scripts/version-generate.ts",
-    "generate:model": "ts-node src/scripts/model-generate.ts"
+    "make:roles": "ts-node src/scripts/role-generate.ts",
+    "make:version": "ts-node src/scripts/version-generate.ts",
+    "make:model": "ts-node src/scripts/model-generate.ts",
+    "make:resources": "ts-node src/scripts/resource-generate.ts"
   },
   "jest": {
     "transform": {
