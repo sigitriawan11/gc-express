@@ -5,6 +5,8 @@ import * as path from 'path';
 
 const args = process.argv.slice(2);
 const nameArg = args.find(arg => arg.startsWith('--name='));
+const modelArg = args.find(arg => arg.startsWith('--model='));
+const dbArg = args.find(arg => arg.startsWith('--instance='));
 
 if (!nameArg) {
   console.error('❌ Please provide --name argument, e.g., --name=Account');
@@ -13,6 +15,16 @@ if (!nameArg) {
 
 const resourceName = nameArg.split('=')[1];
 const fileName = resourceName.toLowerCase();
+
+const useModel = !!modelArg || !!dbArg;
+
+if (useModel && (!modelArg || !dbArg)) {
+  console.error('❌ If you use --model, you must also provide --instance (and vice versa).');
+  process.exit(1);
+}
+
+const modelName = modelArg?.split('=')[1];
+const dbName = dbArg?.split('=')[1];
 
 const SRC_PATH = path.resolve('src');
 
@@ -23,8 +35,8 @@ const typesPath = path.join(SRC_PATH, 'types', `${fileName}-types.ts`);
 
 const controllerContent = `import { GCRouter } from "../config/router";
 import { ${resourceName}Resource } from "./resources/${fileName}-resource";
-
-GCRouter.resources(${resourceName}Resource).register();
+${useModel ? `import ${modelName}Model from "../model/${modelName?.toLowerCase()}-model";\n` : ''}
+GCRouter.resources([${resourceName}Resource${useModel ? `, ${modelName}Model` : ''}]).register();
 `;
 
 const resourceContent = `import { NextFunction, Request, Response } from "express";
@@ -135,6 +147,38 @@ export interface ${resourceName}ResponseUpdate {}
 export interface ${resourceName}ResponseDelete {}
 `;
 
+const modelContent = `import { GCModel } from '../config/model';
+import { ${dbName} } from '../app/database';
+
+interface ${modelName}Attributes {
+
+}
+
+class ${modelName}Model extends GCModel<${modelName}Attributes> {
+
+}
+
+${modelName}Model.init(
+  {
+  },
+  {
+    sequelize: ${dbName},
+    modelName: '${modelName}',
+    schema: 'apps',
+    freezeTableName: true,
+    tableName: '${modelName?.toLowerCase()}s',
+    paranoid: true,
+    timestamps: true,
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    deletedAt: "deleted_at",
+  }
+);
+
+export { ${modelName}Attributes };
+export default ${modelName}Model;
+`;
+
 function writeFile(filePath: string, content: string) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
@@ -153,3 +197,8 @@ writeFile(controllerPath, controllerContent);
 writeFile(resourcePath, resourceContent);
 writeFile(servicePath, serviceContent);
 writeFile(typesPath, typesContent);
+
+if (useModel && modelName && dbName) {
+  const modelPath = path.join(SRC_PATH, 'model', `${modelName.toLowerCase()}-model.ts`);
+  writeFile(modelPath, modelContent);
+}
