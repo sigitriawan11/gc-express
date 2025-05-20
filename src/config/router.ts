@@ -5,6 +5,7 @@ import { multerMiddleware } from "./multer";
 import { Utils } from "../utils/utils";
 import { GCModel, GCModelStatic } from "./model";
 import { modelBindingMiddleware } from "../middleware/model-binding-middleware";
+import { Model } from "sequelize";
 
 interface ResourceController {
   find?: RequestHandler;
@@ -96,7 +97,7 @@ export class GCRouter {
   };
 
   static resources(
-    controller: ResourceController,
+    controller: ResourceController | [ResourceController, GCModelStatic<GCModel<any>>],
     config?: Partial<Record<keyof ResourceController, boolean>>
   ) {
     const routes: {
@@ -113,20 +114,30 @@ export class GCRouter {
       ...config,
     };
 
-    if (controller.find && finalConfig.find) {
-      routes.push({ route: this.get(), handler: controller.find });
+    let c;
+    let bindModel: GCModelStatic<GCModel<any>>;
+
+    if (Array.isArray(controller)) {
+      c = controller[0];
+      bindModel = controller[1];
+    } else {
+      c = controller;
     }
-    if (controller.findOne && finalConfig.findOne) {
-      routes.push({ route: this.get(":id"), handler: controller.findOne });
+
+    if (c?.find && finalConfig.find) {
+      routes.push({ route: this.get(), handler: c?.find });
     }
-    if (controller.create && finalConfig.create) {
-      routes.push({ route: this.post(), handler: controller.create });
+    if (c?.findOne && finalConfig.findOne) {
+      routes.push({ route: this.get(":id"), handler: c?.findOne });
     }
-    if (controller.update && finalConfig.update) {
-      routes.push({ route: this.put(":id"), handler: controller.update });
+    if (c?.create && finalConfig.create) {
+      routes.push({ route: this.post(), handler: c?.create });
     }
-    if (controller.delete && finalConfig.delete) {
-      routes.push({ route: this.delete(":id"), handler: controller.delete });
+    if (c?.update && finalConfig.update) {
+      routes.push({ route: this.put(":id"), handler: c?.update });
+    }
+    if (c?.delete && finalConfig.delete) {
+      routes.push({ route: this.delete(":id"), handler: c?.delete });
     }
 
     return {
@@ -136,6 +147,10 @@ export class GCRouter {
       },
       register() {
         routes.forEach(({ route, handler }) => {
+          if (bindModel) {
+            route.middlewares.push(modelBindingMiddleware(bindModel))
+           }
+
           route.handler(handler);
         });
       },
