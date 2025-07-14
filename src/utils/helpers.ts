@@ -29,7 +29,9 @@ export class Helpers {
       const callerFile = this.getCallerFilePath();
       const controllersPath = path.join(__dirname, "../controllers");
       const relativePath = path.relative(controllersPath, callerFile);
-      const cleanedPath = relativePath.replace(/\\/g, "/").replace(/\.ts$/, "");
+      const cleanedPath = relativePath
+      .replace(/\\/g, "/")
+      .replace(/\.(js|ts)$/, "");
         
       return "/" + cleanedPath + pathOverride;
     }

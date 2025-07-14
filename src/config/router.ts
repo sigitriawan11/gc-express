@@ -5,7 +5,6 @@ import { multerMiddleware } from "./multer";
 import { Utils } from "../utils/utils";
 import { GCModel, GCModelStatic } from "./model";
 import { modelBindingMiddleware } from "../middleware/model-binding-middleware";
-import { Model } from "sequelize";
 
 interface ResourceController {
   find?: RequestHandler;
@@ -13,6 +12,92 @@ interface ResourceController {
   create?: RequestHandler;
   update?: RequestHandler;
   delete?: RequestHandler;
+}
+
+type ModelBindingMethods = "findOne" | "update" | "delete";
+
+type MulterMethod = "create" | "update";
+type MulterType = "single" | "array" | "any" | "fields";
+type MulterOptionsForType<T extends MulterType> = T extends "fields"
+  ? Array<{ name: string; maxCount: number }>
+  : T extends "array"
+  ? { name: string; maxCount?: number }
+  : any;
+
+type MulterConfig =
+  | boolean
+  | {
+      [K in MulterType]?:
+        | MulterMethod
+        | MulterMethod[]
+        | Partial<Record<MulterMethod, MulterOptionsForType<K>>>;
+    };
+
+type ResourceConfig = {
+  find?: boolean;
+  findOne?: boolean;
+  create?: boolean;
+  update?: boolean;
+  delete?: boolean;
+  multer?: MulterConfig;
+  keyModelBinding?: string | Partial<Record<ModelBindingMethods, string>>;
+};
+
+function normalizeMulter(
+  config: MulterConfig
+): Map<"create" | "update", { type: MulterType; options?: any }> {
+  const map = new Map<
+    "create" | "update",
+    { type: MulterType; options?: any }
+  >();
+
+  if (config === true) {
+    map.set("create", { type: "single" });
+    map.set("update", { type: "single" });
+    return map;
+  }
+
+  if (typeof config !== "object" || config === null) {
+    return map;
+  }
+
+  for (const type of ["single", "array", "any", "fields"] as MulterType[]) {
+    const val = config[type as keyof typeof config];
+
+    if (!val) continue;
+
+    if (typeof val === "string") {
+      map.set(val as MulterMethod, { type });
+    } else if (Array.isArray(val)) {
+      val.forEach((method) => map.set(method as MulterMethod, { type }));
+    } else if (typeof val === "object") {
+      for (const method of Object.keys(val) as MulterMethod[]) {
+        map.set(method, { type, options: val[method] });
+      }
+    }
+  }
+
+  return map;
+}
+
+function resolveParam(
+  method: "findOne" | "update" | "delete",
+  bindModel?: GCModelStatic<GCModel<any>>,
+  keyModelBinding?:
+    | string
+    | Partial<Record<"findOne" | "update" | "delete", string>>
+): string {
+  if (!bindModel) return "";
+
+  const defaultKey = bindModel.primaryKeyAttribute || "id";
+
+  if (!keyModelBinding) return `:${defaultKey}`;
+
+  if (typeof keyModelBinding === "string") {
+    return `:${keyModelBinding}`;
+  }
+
+  return `:${keyModelBinding[method] ?? defaultKey}`;
 }
 
 export class GCRouter {
@@ -97,13 +182,17 @@ export class GCRouter {
   };
 
   static resources(
-    controller: ResourceController | [ResourceController, GCModelStatic<GCModel<any>>],
-    config?: Partial<Record<keyof ResourceController, boolean>>
+    controller:
+      | ResourceController
+      | [ResourceController, GCModelStatic<GCModel<any>>],
+    config?: ResourceConfig
   ) {
     const routes: {
       route: GCRouter;
       handler: RequestHandler;
     }[] = [];
+
+    const { multer, ...cleanConfig } = config || {};
 
     const finalConfig: Record<keyof ResourceController, boolean> = {
       find: true,
@@ -111,7 +200,7 @@ export class GCRouter {
       create: true,
       update: true,
       delete: true,
-      ...config,
+      ...cleanConfig,
     };
 
     let c;
@@ -124,20 +213,49 @@ export class GCRouter {
       c = controller;
     }
 
+    const [typeParam, valueParam] = [
+      typeof config?.keyModelBinding,
+      config?.keyModelBinding,
+    ];
+
+    const multerMap = normalizeMulter(config?.multer!);
+
     if (c?.find && finalConfig.find) {
       routes.push({ route: this.get(), handler: c?.find });
     }
     if (c?.findOne && finalConfig.findOne) {
-      routes.push({ route: this.get(":id"), handler: c?.findOne });
+      const route = this.get(resolveParam("findOne", bindModel!, valueParam));
+      routes.push({
+        route: route,
+        handler: c?.findOne,
+      });
     }
     if (c?.create && finalConfig.create) {
-      routes.push({ route: this.post(), handler: c?.create });
+      const route = this.post();
+
+      if (multerMap.get("create")) {
+        route.upload[multerMap.get("create")?.type!](
+          multerMap.get("create")?.options
+        );
+      }
+
+      routes.push({ route, handler: c?.create });
     }
     if (c?.update && finalConfig.update) {
-      routes.push({ route: this.put(":id"), handler: c?.update });
+      const route = this.put(resolveParam("update", bindModel!, valueParam));
+
+      if (multerMap.get("update")) {
+        route.upload[multerMap.get("update")?.type!](
+          multerMap.get("update")?.options
+        );
+      }
+      routes.push({ route: route, handler: c?.update });
     }
     if (c?.delete && finalConfig.delete) {
-      routes.push({ route: this.delete(":id"), handler: c?.delete });
+      routes.push({
+        route: this.delete(resolveParam("delete", bindModel!, valueParam)),
+        handler: c?.delete,
+      });
     }
 
     return {
@@ -147,9 +265,9 @@ export class GCRouter {
       },
       register() {
         routes.forEach(({ route, handler }) => {
-          if (bindModel) {
-            route.middlewares.push(modelBindingMiddleware(bindModel))
-           }
+          if (route.path.includes(':') && bindModel) {
+            route.middlewares.push(modelBindingMiddleware(bindModel));
+          }
 
           route.handler(handler);
         });
@@ -230,6 +348,8 @@ export class GCRouter {
             middlewareFn = MiddlewareRegistry.roles(role);
           } else if (entry === "auth") {
             middlewareFn = MiddlewareRegistry.auth;
+          } else if (entry === "guest") {
+            middlewareFn = MiddlewareRegistry.guest;
           } else {
             throw new Error(`Middleware '${entry}' not recognized`);
           }
