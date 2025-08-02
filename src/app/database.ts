@@ -11,4 +11,4 @@ const createInstance = (database:string) : Sequelize => {
   return new Sequelize(dbSpecificConfig)
 }
 
-export const usermanagementDB = createInstance('usermanagement')
+export const laundryDB = createInstance('click_laundry')

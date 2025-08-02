@@ -7,7 +7,10 @@ dotenv.config();
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+    origin: [process.env.CORS_URL!],
+    credentials: true,
+  }));
 app.use(express.json());
 
 export default app;

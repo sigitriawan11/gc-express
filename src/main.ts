@@ -1,15 +1,15 @@
 import { registerRoutes } from "./config/routerLoader";
 import app from "./app/app";
 import { errorMiddleware } from "./middleware/error-middleware";
-import { usermanagementDB } from "./app/database";
 import { SequelizeScopeError } from "sequelize";
+import { laundryDB } from "./app/database";
 
 
 registerRoutes(app);
 
 app.use(errorMiddleware)
 
-usermanagementDB.authenticate()
+laundryDB.authenticate()
 .then(() => {
   app.listen(process.env.PORT, () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);
